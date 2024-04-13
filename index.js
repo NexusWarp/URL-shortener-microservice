@@ -14,30 +14,76 @@ app.use(bodyParser.urlencoded({extended:true}))
 app.get('/', function(req, res) {
   res.sendFile(process.cwd() + '/views/index.html');
 });
-let random;
-let submittedUrl;
-// Your first API endpoint
+const urlDatabase = {};
+let shortUrlCounter = 1; // Start counter for short URLs from 1
+
+// Utility function to validate URLs
+const isValidUrl = (url) => {
+  try {
+    new URL(url);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+// API endpoint for shortening a URL
 app.post('/api/shorturl', function(req, res) {
-  submittedUrl = req.body.url;
-  if(submittedUrl.includes("https://www") && submittedUrl.includes(".com/")){
-    random = Math.floor(Math.random()*9999);
-    res.json({"original_url":`${submittedUrl}`,"short_url":random});
+  // Extract the submitted URL from the request body
+  const submittedUrl = req.body.url;
 
-  }else{
-    res.json({ error: 'invalid url' });
+  // Check if the submitted URL is present and is a string
+  if (!submittedUrl || typeof submittedUrl !== 'string') {
+      return res.json({ error: 'invalid url' });
   }
 
-  
+  // Validate the URL
+  try {
+      const urlObject = new URL(submittedUrl);
+
+      // Additional check to verify the URL is an HTTP or HTTPS URL
+      if (urlObject.protocol !== 'http:' && urlObject.protocol !== 'https:') {
+          return res.json({ error: 'invalid url' });
+      }
+  } catch (e) {
+      // If the URL is invalid, return an error
+      return res.json({ error: 'invalid url' });
+  }
+
+  // The rest of the existing code
+  let shortUrl = Object.keys(urlDatabase).find(key => urlDatabase[key] === submittedUrl);
+
+  if (!shortUrl) {
+      shortUrl = shortUrlCounter++;
+      urlDatabase[shortUrl] = submittedUrl;
+  }
+
+  res.json({
+      original_url: submittedUrl,
+      short_url: shortUrl
+  });
 });
-app.get("/api/shorturl/:code",(req,res)=>{
-  let code = parseInt(req.params.code);
-  if(code==random){
-    res.redirect(submittedUrl)
+
+
+// API endpoint for redirecting to the original URL
+app.get('/api/shorturl/:code', (req, res) => {
+  const code = parseInt(req.params.code, 10);
+
+  // Check if the code is valid
+  if (isNaN(code)) {
+    res.json({ error: 'invalid short URL code' });
+    return;
   }
-  else{
-    res.json({"error":"No short URL found for the given input"});
+
+  // Find the original URL corresponding to the given short URL code
+  const originalUrl = urlDatabase[code];
+
+  if (originalUrl) {
+    res.redirect(originalUrl);
+  } else {
+    res.json({ error: 'No short URL found for the given input' });
   }
-})
+});
 app.listen(port, function() {
   console.log(`Listening on port ${port}`);
 });
